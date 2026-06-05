@@ -1,0 +1,9 @@
+Rice_Image_Dataset/
+rice-image-dataset.zip
+models/
+results/
+.venv/
+.git/
+__pycache__/
+*.pyc
+*.ipynb

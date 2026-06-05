@@ -1,3 +1,9 @@
 # Created by venv; see https://docs.python.org/3/library/venv.html
 
 Rice_Image_Dataset/
+__pycache__/
+*.pyc
+*.pyo
+rice-image-dataset.zip
+models/
+training.log
