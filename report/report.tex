@@ -208,21 +208,15 @@ ViT & 0.55M & \textbf{99.49\%} & \textbf{0.0177} & 887\,s \\
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{figures/cnn_learning_curves.png}
-\caption{CNN training and validation loss/accuracy over 16 epochs.}
-\label{fig:curves_cnn}
+\includegraphics[width=\linewidth]{figures/learning_curves_combined.png}
+\caption{Loss (left) and accuracy (right) per epoch for both models.
+Solid lines: training; dashed lines: validation. Blue: CNN; orange: ViT.}
+\label{fig:curves}
 \end{figure}
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=\linewidth]{figures/vit_learning_curves.png}
-\caption{ViT training and validation loss/accuracy over 20 epochs.}
-\label{fig:curves_vit}
-\end{figure}
-
-The CNN (Figure~\ref{fig:curves_cnn}) shows intermittent validation-loss spikes at
+The CNN (Figure~\ref{fig:curves}, top) shows intermittent validation-loss spikes at
 epochs 6--8 and 14 (gap up to $+0.051$), stabilised by \texttt{ReduceLROnPlateau} and
-stopped early at epoch~16. The ViT (Figure~\ref{fig:curves_vit}) exhibits no such
+stopped early at epoch~16. The ViT (Figure~\ref{fig:curves}, bottom) exhibits no such
 instability: train and val loss track closely throughout, converging to its best
 validation accuracy of \textbf{99.52\%} at epoch~19.
 
