@@ -6,7 +6,7 @@ from tensorflow.keras import layers
 
 # --- Hyperparameters ---
 LEARNING_RATE = 1e-3
-EPOCHS = 2
+EPOCHS = 20
 PATCH_SIZE = 16
 PROJECTION_DIM = 64
 NUM_HEADS = 4

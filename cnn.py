@@ -5,7 +5,7 @@ from tensorflow.keras import layers
 
 # --- Hyperparameters ---
 LEARNING_RATE = 1e-3
-EPOCHS = 2
+EPOCHS = 20
 DROPOUT_CONV = 0.3
 DROPOUT_FC = 0.4
 DENSE_UNITS = 128
