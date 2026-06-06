@@ -1,16 +1,14 @@
 from pathlib import Path
-from time import time
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from sklearn.metrics import ConfusionMatrixDisplay, classification_report
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
-import matplotlib.pyplot as plt
 
 import cnn
 import vit
+from results_writer import RunWriter
 
 
 SEED = 42
@@ -24,6 +22,10 @@ AUTOTUNE = tf.data.AUTOTUNE
 
 
 def build_dataframe(data_dir):
+    """
+    Input:  data_dir: Path
+    Output: (df: DataFrame{path: str, label: str, label_id: int}, class_names: list[str])
+    """
     class_names = sorted([p.name for p in data_dir.iterdir() if p.is_dir()])
     file_paths = []
     labels = []
@@ -40,6 +42,10 @@ def build_dataframe(data_dir):
 
 
 def split_dataframe(df):
+    """
+    Input:  df: DataFrame{path: str, label: str, label_id: int}
+    Output: (train_df: DataFrame, val_df: DataFrame, test_df: DataFrame)  # 70/15/15 split
+    """
     train_df, temp_df = train_test_split(
         df,
         test_size=0.30,
@@ -56,6 +62,10 @@ def split_dataframe(df):
 
 
 def load_and_preprocess(path, label):
+    """
+    Input:  path: tf.string scalar, label: tf.int64 scalar
+    Output: (image: tf.float32 tensor shape (224, 224, 3), label: tf.int64 scalar)
+    """
     image = tf.io.read_file(path)
     image = tf.image.decode_jpeg(image, channels=3)
     image = tf.image.resize(image, IMG_SIZE)
@@ -64,6 +74,10 @@ def load_and_preprocess(path, label):
 
 
 def make_dataset(paths, labels, training=False):
+    """
+    Input:  paths: ndarray[str], labels: ndarray[int], training: bool
+    Output: ds: tf.data.Dataset yielding batches of (images: float32 (B,224,224,3), labels: int (B,))
+    """
     ds = tf.data.Dataset.from_tensor_slices((paths, labels))
     if training:
         ds = ds.shuffle(buffer_size=len(paths), seed=SEED, reshuffle_each_iteration=True)
@@ -82,49 +96,6 @@ def make_dataset(paths, labels, training=False):
         )
     ds = ds.batch(BATCH_SIZE).prefetch(AUTOTUNE)
     return ds
-
-
-def plot_history(history, title_prefix, save_path=None):
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-    axes[0].plot(history.history["loss"], label="train")
-    axes[0].plot(history.history["val_loss"], label="val")
-    axes[0].set_title(f"{title_prefix} Loss")
-    axes[0].legend()
-
-    axes[1].plot(history.history["accuracy"], label="train")
-    axes[1].plot(history.history["val_accuracy"], label="val")
-    axes[1].set_title(f"{title_prefix} Accuracy")
-    axes[1].legend()
-    if save_path:
-        plt.savefig(save_path, bbox_inches="tight")
-    plt.show()
-
-
-def evaluate_model(model, test_ds, class_names, label="Model", results_dir=None):
-    test_loss, test_acc = model.evaluate(test_ds)
-    y_true = np.concatenate([y.numpy() for _, y in test_ds])
-    y_pred_probs = model.predict(test_ds)
-    y_pred = np.argmax(y_pred_probs, axis=1)
-
-    print(f"\n{label} classification report")
-    report_dict = classification_report(y_true, y_pred, target_names=class_names, output_dict=True)
-    print(classification_report(y_true, y_pred, target_names=class_names))
-    
-    if results_dir:
-        report_df = pd.DataFrame(report_dict).transpose()
-        report_df.to_csv(results_dir / f"{label.lower()}_classification_report.csv")
-
-    ConfusionMatrixDisplay.from_predictions(
-        y_true,
-        y_pred,
-        display_labels=class_names,
-        cmap="Blues",
-        xticks_rotation=45,
-    )
-    if results_dir:
-        plt.savefig(results_dir / f"{label.lower()}_confusion_matrix.png", bbox_inches="tight")
-    plt.show()
-    return test_loss, test_acc
 
 
 def main():
@@ -147,60 +118,39 @@ def main():
     class_weight = dict(enumerate(class_weights))
 
     Path("models").mkdir(exist_ok=True)
-    results_dir = Path("results")
-    results_dir.mkdir(exist_ok=True)
+    results_writer = RunWriter(results_dir=Path("results"))
 
-    print("Training CNN...")
-    cnn_model = cnn.build_cnn_model(IMG_SIZE, num_classes)
-    cnn_history, cnn_train_time = cnn.train_cnn(
-        cnn_model, train_ds, val_ds, class_weight, epochs=20
-    )
-    pd.DataFrame(cnn_history.history).to_csv(results_dir / "cnn_training_history.csv", index=False)
-    plot_history(cnn_history, "CNN", save_path=results_dir / "cnn_learning_curves.png")
-    cnn_test_loss, cnn_test_acc = evaluate_model(cnn_model, test_ds, class_names, "CNN", results_dir=results_dir)
-    cnn_params = cnn_model.count_params()
+    success = False
+    try:
+        print("Training CNN...")
+        cnn_model = cnn.build_cnn_model(IMG_SIZE, num_classes)
+        cnn_history, cnn_train_time = cnn.train_cnn(cnn_model, train_ds, val_ds, class_weight)
+        results_writer.save_training_history(cnn_history, "CNN")
+        results_writer.plot_history(cnn_history, "CNN")
+        cnn_test_loss, cnn_test_acc = results_writer.evaluate_model(cnn_model, test_ds, class_names, "CNN")
+        cnn_params = cnn_model.count_params()
 
-    print("Training ViT...")
-    vit_model = vit.build_vit_model(IMG_SIZE, num_classes)
-    vit_history, vit_train_time = vit.train_vit(
-        vit_model, train_ds, val_ds, class_weight, epochs=15
-    )
-    pd.DataFrame(vit_history.history).to_csv(results_dir / "vit_training_history.csv", index=False)
-    plot_history(vit_history, "ViT", save_path=results_dir / "vit_learning_curves.png")
-    vit_test_loss, vit_test_acc = evaluate_model(vit_model, test_ds, class_names, "ViT", results_dir=results_dir)
-    vit_params = vit_model.count_params()
+        print("Training ViT...")
+        vit_model = vit.build_vit_model(IMG_SIZE, num_classes)
+        vit_history, vit_train_time = vit.train_vit(vit_model, train_ds, val_ds, class_weight)
+        results_writer.save_training_history(vit_history, "ViT")
+        results_writer.plot_history(vit_history, "ViT")
+        vit_test_loss, vit_test_acc = results_writer.evaluate_model(vit_model, test_ds, class_names, "ViT")
+        vit_params = vit_model.count_params()
 
-    comparison = pd.DataFrame(
-        [
-            {
-                "model": "CNN",
-                "params": cnn_params,
-                "test_acc": cnn_test_acc,
-                "test_loss": cnn_test_loss,
-                "train_time_sec": cnn_train_time,
-            },
-            {
-                "model": "ViT",
-                "params": vit_params,
-                "test_acc": vit_test_acc,
-                "test_loss": vit_test_loss,
-                "train_time_sec": vit_train_time,
-            },
-        ]
-    )
-    comparison.to_csv(results_dir / "cnn_vs_vit_comparison.csv", index=False)
-    print("\nCNN vs ViT comparison")
-    print(comparison)
+        comparison = pd.DataFrame(
+            [
+                {"model": "CNN", "params": cnn_params, "test_acc": cnn_test_acc, "test_loss": cnn_test_loss, "train_time_sec": cnn_train_time},
+                {"model": "ViT", "params": vit_params, "test_acc": vit_test_acc, "test_loss": vit_test_loss, "train_time_sec": vit_train_time},
+            ]
+        )
+        print("\nCNN vs ViT comparison")
+        print(comparison)
+        results_writer.plot_comparison(comparison)
 
-    # Plot comparison
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    comparison.plot(x="model", y="test_acc", kind="bar", ax=axes[0], title="Test Accuracy", legend=False, color=["blue", "orange"])
-    axes[0].set_ylim(0.9, 1.0)
-    comparison.plot(x="model", y="params", kind="bar", ax=axes[1], title="Parameter Count", legend=False, color=["blue", "orange"])
-    comparison.plot(x="model", y="train_time_sec", kind="bar", ax=axes[2], title="Training Time (s)", legend=False, color=["blue", "orange"])
-    plt.tight_layout()
-    plt.savefig(results_dir / "cnn_vs_vit_comparison_plots.png")
-    plt.show()
+        success = True
+    finally:
+        results_writer.write_run_index(success=success)
 
 
 if __name__ == "__main__":

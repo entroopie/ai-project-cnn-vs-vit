@@ -7,3 +7,7 @@ __pycache__/
 rice-image-dataset.zip
 models/
 training.log
+
+# Run outputs (keep results_index.json)
+results/*.csv
+results/*.png
