@@ -43,5 +43,50 @@
       "8b363458_cnn_vs_vit_comparison.csv",
       "8b363458_cnn_vs_vit_comparison_plots.png"
     ]
+  },
+  {
+    "run_id": "8f1ed8fb",
+    "datetime": "2026-06-06T09:33:14.840963+00:00",
+    "duration_sec": 1246.48,
+    "success": true,
+    "config": {
+      "cnn": {
+        "learning_rate": 0.001,
+        "epochs": 20,
+        "dropout_conv": 0.3,
+        "dropout_fc": 0.4,
+        "dense_units": 128,
+        "early_stopping_patience": 5,
+        "reduce_lr_factor": 0.5,
+        "reduce_lr_patience": 3,
+        "reduce_lr_min_lr": 1e-06
+      },
+      "vit": {
+        "learning_rate": 0.001,
+        "epochs": 20,
+        "patch_size": 16,
+        "projection_dim": 64,
+        "num_heads": 4,
+        "transformer_layers": 6,
+        "mlp_dim": 128,
+        "dropout_rate": 0.1,
+        "early_stopping_patience": 5,
+        "reduce_lr_factor": 0.5,
+        "reduce_lr_patience": 3,
+        "reduce_lr_min_lr": 1e-06
+      }
+    },
+    "files": [
+      "8f1ed8fb_cnn_training_history.csv",
+      "8f1ed8fb_cnn_learning_curves.png",
+      "8f1ed8fb_cnn_classification_report.csv",
+      "8f1ed8fb_cnn_confusion_matrix.png",
+      "8f1ed8fb_vit_training_history.csv",
+      "8f1ed8fb_vit_learning_curves.png",
+      "8f1ed8fb_vit_classification_report.csv",
+      "8f1ed8fb_vit_confusion_matrix.png",
+      "8f1ed8fb_cnn_vs_vit_comparison.csv",
+      "8f1ed8fb_cnn_vs_vit_comparison_plots.png"
+    ]
   }
 ]

@@ -1,0 +1,302 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[margin=1.8cm]{geometry}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{needspace}
+
+\title{\textbf{CNN vs.\ Vision Transformer for Rice Variety Classification}\\[4pt]
+\large A Comparative Study on the Rice Image Dataset}
+\author{AAU Mini-Project}
+\date{June 2026}
+
+\begin{document}
+\maketitle
+
+% ---------------------------------------------
+\section{Introduction}
+% ---------------------------------------------
+
+This project compares two deep learning architectures on an image classification
+task: a Convolutional Neural Network (CNN) and a Vision Transformer (ViT). Both
+models are built from scratch in TensorFlow/Keras and trained to classify rice
+grain images into five varieties. The goal is to evaluate how each architecture
+performs under identical conditions, without any pretraining or transfer
+learning.
+
+The core question is whether the CNN's spatial inductive bias gives it a
+meaningful advantage over the ViT's global self-attention when both are trained
+from scratch on a domain-specific dataset.
+
+% ---------------------------------------------
+\section{Dataset and Preprocessing}
+% ---------------------------------------------
+
+The dataset is the Rice Image Dataset~\cite{rice}, containing roughly
+75\,000 JPEG images across five classes: Arborio, Basmati, Ipsala, Jasmine,
+and Karacadag (15\,000 images each, all $224\times224$ px).
+
+The data is split into 70\% training, 15\% validation, and 15\% test using
+stratified sampling to keep class proportions equal across splits. A fixed
+random seed (42) is used throughout for reproducibility. Training images receive
+augmentation: random horizontal flips, rotations up to 10\%, and zoom up to
+10\%. Validation and test images are not augmented. Class weights are computed
+from the training split and passed to the optimiser to handle any class
+imbalance. Data loading uses \texttt{tf.data} with prefetching and parallel
+mapping for efficient GPU throughput.
+
+% ---------------------------------------------
+\section{Model Architectures}
+% ---------------------------------------------
+
+\needspace{22\baselineskip}
+\noindent%
+\begin{minipage}[t]{0.48\linewidth}%
+\vspace*{-\parskip}%
+\subsection{CNN}
+
+The CNN is a sequential model built from three convolutional blocks followed by
+a fully connected classification head. The general pattern in each block is to
+apply a convolution to extract spatial features, activate with ReLU, and reduce
+spatial dimensions with max pooling. As the network deepens, the filter count
+increases, allowing later layers to detect more complex and abstract patterns.
+
+\textbf{Block 1} applies \texttt{Conv2D} with 32 filters ($3\times3$, ReLU)
+followed by \texttt{MaxPooling2D}, halving resolution from $224\times224$ to
+$112\times112$.
+
+\textbf{Block 2} repeats with 64 filters, reducing to $56\times56$. The
+increased filter count captures more feature channels simultaneously.
+
+\textbf{Block 3} uses 128 filters, reducing to $28\times28$, followed by
+\texttt{Dropout}($p{=}0.3$) to reduce overfitting.
+
+The \textbf{classification head} flattens the feature map, passes it through
+\texttt{Dense}(128, ReLU) with \texttt{Dropout}($p{=}0.4$), and outputs via
+\texttt{Dense}(5, softmax). Total: \textbf{11.2M parameters}.
+\end{minipage}%
+\hfill%
+\begin{minipage}[t]{0.48\linewidth}%
+\vspace*{-\parskip}%
+\centering
+\includegraphics[width=\linewidth]{figures/cnn2.png}
+\captionof{figure}{CNN model overview.}
+\label{fig:cnn}
+\end{minipage}
+
+\needspace{22\baselineskip}
+\noindent%
+\begin{minipage}[t]{0.48\linewidth}%
+\vspace*{-\parskip}%
+\subsection{Vision Transformer}
+
+The ViT is implemented from scratch in Keras. Rather than processing the image
+pixel by pixel, the ViT first converts the image into a sequence of patch
+embeddings and then processes that sequence with a stack of Transformer encoder
+blocks.
+
+\textbf{Patch embedding.} The $224\times224$ input image is divided into
+non-overlapping $16\times16$ patches, producing $(224/16)^2=196$ patches. A
+single \texttt{Conv2D} (kernel 16, stride 16) simultaneously extracts and
+projects each patch into a 64-dimensional embedding vector, reshaped to a
+sequence of 196 vectors.
+
+\textbf{Positional encoding.} A learned \texttt{Embedding} layer maps each of
+the 196 position indices to a 64-d vector, added element-wise to the patch
+embeddings, giving the model awareness of spatial position.
+
+\textbf{Transformer encoder.} The sequence passes through six stacked encoder
+blocks. Each block has two residual sub-layers: \texttt{LayerNorm} +
+\texttt{MultiHeadAttention} (4 heads, key dim 64), then \texttt{LayerNorm} +
+MLP (128$\to$64, GELU). Dropout 0.1 is applied inside both. Attention allows
+every patch to attend to every other patch, capturing global relationships
+regardless of spatial distance.
+\end{minipage}%
+\hfill%
+\begin{minipage}[t]{0.48\linewidth}%
+\vspace*{-\parskip}%
+\centering
+\includegraphics[width=\linewidth]{figures/vit.png}
+\captionof{figure}{ViT model overview.}
+\label{fig:vit}
+\end{minipage}
+
+\textbf{Classification head.} After the encoder, \texttt{GlobalAveragePooling1D}
+aggregates the 196 patch vectors into one, followed by \texttt{Dropout}(0.1)
+and \texttt{Dense}(5, softmax). Total: \textbf{549K parameters}
+(${\approx}20\times$ fewer than the CNN).
+
+% ---------------------------------------------
+\section{Training Setup}
+% ---------------------------------------------
+
+Both models are trained with the same configuration to ensure a fair comparison.
+The optimiser is Adam with an initial learning rate of $10^{-3}$. Training runs
+for up to 20 epochs with a batch size of 32. Three callbacks are used: early
+stopping (patience 5, restores best weights), a model checkpoint (saves best
+validation model), and learning rate reduction on plateau (factor 0.5, patience
+3, min lr $10^{-6}$). Training wall-clock time is recorded separately for each
+model.
+
+\begin{table}[H]
+\centering
+\caption{Shared training hyperparameters.}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Hyperparameter}   & \textbf{Value} \\
+\midrule
+Optimiser                 & Adam \\
+Learning rate             & $10^{-3}$ \\
+Max epochs                & 20 \\
+Batch size                & 32 \\
+Early stopping patience   & 5 \\
+LR decay factor           & 0.5 \\
+LR decay patience         & 3 \\
+Minimum learning rate     & $10^{-6}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Experimental platform.}
+\label{tab:hw}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Component} & \textbf{Specification} \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{Hardware}} \\[2pt]
+CPU    & AMD EPYC 9354P, 32 cores / 64 threads \\
+Memory & 256\,GB DDR5 \\
+GPU    & NVIDIA L40S, 46\,GB GDDR6, PCIe Gen4$\times$16 \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{Software}} \\[2pt]
+OS        & Ubuntu 22.04.5 LTS, kernel 5.15.0-173 \\
+CUDA      & 12.6 (V12.6.85) \\
+Driver    & 580.95.05 \\
+Container & Docker 29.1.3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------
+\section{Results}
+% ---------------------------------------------
+
+Both models are evaluated on the held-out test set after training. Table~\ref{tab:results}
+reports the headline metrics; Figures~\ref{fig:curves_cnn}--\ref{fig:curves_vit} show the
+per-epoch learning curves, and Figure~\ref{fig:comparison} provides a final side-by-side summary.
+
+\begin{table}[H]
+\centering
+\caption{CNN vs.\ ViT on the test set (run \texttt{8f1ed8fb}).}
+\label{tab:results}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Model} & \textbf{Params} & \textbf{Acc} & \textbf{Loss} & \textbf{Time} \\
+\midrule
+CNN & 11.2M & 98.71\% & 0.0427 & 351\,s \\
+ViT & 0.55M & \textbf{99.49\%} & \textbf{0.0177} & 887\,s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/cnn_learning_curves.png}
+\caption{CNN training and validation loss/accuracy over 16 epochs.}
+\label{fig:curves_cnn}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/vit_learning_curves.png}
+\caption{ViT training and validation loss/accuracy over 20 epochs.}
+\label{fig:curves_vit}
+\end{figure}
+
+The CNN (Figure~\ref{fig:curves_cnn}) shows intermittent validation-loss spikes at
+epochs 6--8 and 14 (gap up to $+0.051$), stabilised by \texttt{ReduceLROnPlateau} and
+stopped early at epoch~16. The ViT (Figure~\ref{fig:curves_vit}) exhibits no such
+instability: train and val loss track closely throughout, converging to its best
+validation accuracy of \textbf{99.52\%} at epoch~19.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/comparison.png}
+\caption{CNN vs.\ ViT: test accuracy, test loss, parameter count, and training time.}
+\label{fig:comparison}
+\end{figure}
+
+% ---------------------------------------------
+\section{Discussion}
+% ---------------------------------------------
+
+CNNs apply small local filters that encode the prior that nearby pixels share
+information --- a well-suited assumption for images. The ViT takes a different
+approach: it splits the image into patches and uses self-attention to relate any
+two patches regardless of spatial distance, giving more flexibility at the cost
+of no built-in spatial structure.
+
+\paragraph{Accuracy.}
+Contrary to the expectation that a CNN's inductive bias would dominate on a
+moderate-sized dataset, the ViT outperformed the CNN by \textbf{0.78\,pp}
+(99.49\% vs.\ 98.71\%), translating to roughly 88 fewer misclassifications on
+the 11\,250-image test set. Ipsala is the easiest class for both models (CNN F1
+99.98\%, ViT F1 100\%), likely due to its morphologically distinct grain shape.
+Visually similar long-grain types such as Basmati and Jasmine were the hardest
+to separate.
+
+\paragraph{Efficiency.}
+The ViT achieves better accuracy with \textbf{20$\times$ fewer parameters}
+(549K vs.\ 11.2M), demonstrating that self-attention over patch sequences can
+capture discriminative features more compactly than stacked convolutions for
+this task. However, it takes \textbf{2.5$\times$ longer} to train (887\,s vs.\
+351\,s), reflecting the quadratic attention complexity over 196 patches.
+
+\paragraph{Stability.}
+The CNN's mid-training spikes suggest its feature hierarchy is more sensitive to
+learning-rate scheduling than the ViT. A lower initial lr ($5\times10^{-4}$) or
+stronger weight decay may reduce this instability.
+
+\paragraph{Limitations.}
+Both models are trained from scratch on a single dataset. Transfer learning from
+ImageNet would likely improve both accuracy and training efficiency. The ViT here
+is a lightweight custom baseline, not a pre-trained ViT-B/16, so direct
+comparison to published ViT benchmarks is not appropriate.
+
+% ---------------------------------------------
+\section*{Conclusion}
+% ---------------------------------------------
+
+This project trained a custom CNN and a custom ViT on the same rice grain
+dataset under identical conditions. Both architectures are implemented from
+scratch with no pretrained weights, isolating the effect of architectural design.
+Contrary to the expectation that transformers require large-scale pretraining to
+match CNN performance, the ViT outperformed the CNN with 20$\times$ fewer
+parameters, achieving 99.49\% test accuracy and more stable training dynamics.
+The CNN remains competitive and trains 2.5$\times$ faster, making it a
+reasonable choice under resource constraints.
+
+\begin{thebibliography}{1}
+\bibitem{rice}
+M.\ Koklu et al., ``Classification of Rice Varieties with Deep Learning
+Methods,'' \textit{Computers and Electronics in Agriculture}, 2021.
+\end{thebibliography}
+
+\appendix
+\section*{Appendix: Source Code}
+
+The full source code, training scripts, Dockerfile, and results index are
+publicly available at:
+
+\begin{center}
+\url{https://github.com/entroopie/ai-project-cnn-vs-vit}
+\end{center}
+
+\end{document}

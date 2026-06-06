@@ -9,5 +9,3 @@ models/
 training.log
 
 # Run outputs (keep results_index.json)
-results/*.csv
-results/*.png
