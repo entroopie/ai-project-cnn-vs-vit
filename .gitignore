@@ -9,3 +9,12 @@ models/
 training.log
 
 # Run outputs (keep results_index.json)
+
+.venv/
+__pycache__/
+
+.DS_Store
+*.png
+*.jpg
+*.jpeg
+*.zip
